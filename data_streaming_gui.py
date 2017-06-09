@@ -18,7 +18,6 @@ import tkinter as tk
 #local files
 import data_class
 import plotter
-import save_toplevel
 import usb_comm
 
 
@@ -40,22 +39,21 @@ class DataStreamingViewer(tk.Tk):
         # initialize the custom data class to hold the data and the device
         self.data = data_class.StreamingData()
         self.device = usb_comm.PlantUSB(self)
+        print('check3')
         # initialize variables
         self.running_job = None
-        self.display_time_frame = 5
-        self.vdac_setting = 500  # mV
-        self.gain = 1
+        self.display_time_frame = 5  # type: int
+        self.vdac_setting = 500  # type: int mV
+        self.gain = 1.0  # type: float
+        self.data_saved = True  # type: bool
         # initialize tk Variables
         self.time_var = tk.IntVar()
         self.vdac_var = tk.IntVar()
         self.gain_var = tk.IntVar()
 
-        # get the letter and number of file to use to save the next file with
-        date = str(datetime.date.today())
-        date_str = date[2:4]+date[5:7]+date[8:]
-        self.save_state = save_toplevel.SaveState(date_str)
         # make directory and start logging file
-        print('start logging')
+        date = str(datetime.date.today())
+        date_str = date[2:4] + date[5:7] + date[8:]
         self.data_logging_handler(date_str)
         # make frame for user to select number of adc channels to record
         control_frame = tk.Frame(self)
@@ -79,7 +77,7 @@ class DataStreamingViewer(tk.Tk):
         self.clear_button = tk.Button(button_frame1, text='Clear Data', command=self.data.clear)
         self.clear_button.pack(side='left')
         self.calibrate_button = tk.Button(button_frame1, text='Calibrate', command=self.calibrate)
-        self.calibrate_button.pack(side='left')
+        # self.calibrate_button.pack(side='left')
 
         self.data_plot = plotter.Plotter(self, self.data)
         self.data_plot.pack(side='top', fill=tk.BOTH, expand=True)
@@ -87,7 +85,8 @@ class DataStreamingViewer(tk.Tk):
         tk.Button(self, text='Save all data', command=self.save_data).pack(side='top')
 
     def save_data(self):
-        save_toplevel.SaveTopLevel(self, self.data.x_data, self.data.y_data_to_display)
+        # self.data_saved = save_toplevel.SaveTopLevel(self, self.data.x_data, self.data.y_data_to_display)
+        self.data.call_save()
 
     def create_time_frame(self, _frame):
         tk.Label(_frame, text="Seconds to display: ").pack(side='left')
@@ -98,7 +97,8 @@ class DataStreamingViewer(tk.Tk):
     def create_offset_frame(self, _frame):
         tk.Label(_frame, text="Vref offset (mV): ").pack(side='left')
         self.vdac_var.set(self.vdac_setting)
-        tk.Spinbox(_frame, from_=0, to=1024, increment=4, textvariable=self.vdac_var, width=6).pack(side='left')
+        tk.Spinbox(_frame, from_=0, to=1024, increment=4, textvariable=self.vdac_var, width=6
+                   ).pack(side='left')
         self.vdac_var.trace("w", self.set_offset_vdac)
 
     def create_gain_frame(self, _frame):
@@ -110,16 +110,18 @@ class DataStreamingViewer(tk.Tk):
     def create_control_panel(self, _frame):
         tk.Label(_frame, text="ADC channels from device: ").pack(side="left")
         channels_var = tk.IntVar()
-        channels_var.trace("w", lambda name, index, mode, sv=channels_var: self.set_channels(channels_var.get()))
-        tk.Spinbox(_frame, from_=1, to=8, textvariable=channels_var, width=6).pack(side='left')
+        channels_var.trace("w", lambda name, index, mode,
+                                       sv=channels_var: self.set_channels(channels_var.get()))
+        tk.Spinbox(_frame, from_=1, to=3, textvariable=channels_var, width=6).pack(side='left')
 
     def set_time(self, *args):
         self.display_time_frame = self.time_var.get()
         self.data_plot.set_time_frame(self.display_time_frame)
         # call plotter.display_data if the stream is not running
-        print('+++++++++++++++++++++', self.read_button['state'])
+        # print('+++++++++++++++++++++', self.read_button['state'])
         if self.read_button['state'] == 'active':
-            self.data_plot.draw_new_data(self.x_data, self.y_data, self.display_time_frame)
+            # self.data_plot.draw_new_data(self.x_data, self.y_data, self.display_time_frame)
+            self.data_plot.display_data()
         # else the plot will update next time data is updated
 
     def start_reading(self):
@@ -130,8 +132,7 @@ class DataStreamingViewer(tk.Tk):
         self.device.start_reading()
 
     def set_channels(self, *args):
-        self.data.number_channels = args[0]
-        self.data.clear()
+        self.device.set_number_channels(args[0])
 
     def set_gain(self, *args):
         self.gain = self.gain_var.get()
@@ -141,8 +142,11 @@ class DataStreamingViewer(tk.Tk):
 
     def set_offset_vdac(self, *args):
         print('set offset vdac')
-        self.vdac_setting = self.vdac_var.get()
-        self.device.set_offset_vdac(self.vdac_setting/4)
+        try:
+            self.vdac_setting = self.vdac_var.get()
+            self.device.set_offset_vdac(self.vdac_setting/4)
+        except Exception as e:  # if the user is entering a number it might get messed
+            logging.error("Setting Voffset error: {0}".format(e))
 
     def start_reading_data22(self):
         """ Start reading the data streaming from the device.  Start a new thread to read the
@@ -183,17 +187,17 @@ class DataStreamingViewer(tk.Tk):
         _log_path = '%s/data/%s' % (path, date)
         _log_file = '%s/data/%s/%s.log' % (path, date, date)
         self.make_data_path(_log_path)
-        print('hello')
         # print('wtf', getattr(logging, loglevel.upper()))
         # print(logging.getEffectiveLevel())
-        logging.basicConfig(format='%(asctime)s %(module)s %(lineno)d: %(message)s',
-                            datefmt='%m/%d/%Y %I:%M:%S %p',
-                            filename=_log_file, filemode='a', level=logging.INFO)
+        # logging.basicConfig(format='%(asctime)s %(module)s %(lineno)d: %(message)s',
+        #                     datefmt='%m/%d/%Y %I:%M:%S %p',
+        #                     filename=_log_file, filemode='a', level=logging.DEBUG)
         # print('wtf', getattr(logging, loglevel.upper()))
 
     def make_data_path(self, _path):
         # check if '/data' file already exists in current
         if not os.path.exists(_path):
+            logging.debug('making data path: ', _path)
             os.makedirs(_path)
         else:  # the program has run today already, get the last used branch letter and file number
             pass

@@ -25,6 +25,9 @@ from usb_constants import *
 __author__ = 'Kyle V. Lopin'
 
 
+REFRESH_DELAY = 200  # type: int    mseconds to delay updating plot after it has been updated, give some time to the other threads
+
+
 class PlantUSB(object):
     """ Class to communicate with a device that can measure a number of different input signals, receives the raw
     adc counts from the device and converts the adc counts to the voltage measured.   Supports a calibration routine
@@ -46,15 +49,18 @@ class PlantUSB(object):
         :param vendor_id: hexadecimal of USB's vendor id
         :param product_id: hexadecimal of USB's product id
         """
-        self.master = master  # Type: tk.Tk
-        self.data = master.data  # Type: data_class.StreamingData
+        print('check1')
+        self.channel_tracker = 0
+        self.master = master  # type: tk.Tk
+        self.data = master.data  # type: data_class.StreamingData
         self._device = self.connect_usb(vendor_id, product_id)  # Type: pyUSB device
         self.data_queue = queue.Queue()  # This will store all the raw adc counts of an adc channel, i.e. as many data
         # points as is stored in DC_CHANNEL_DATA_SIZE
         self.packet_ready_event = threading.Event()
-        self.threaded_data_stream = None  # Type: threading.thread.  Placeholder for now, make a new thread everytime
-        # a data stream is started
+        # Placeholder for now, make a new thread everytime a data stream is started
+        self.threaded_data_stream = None  # type: threading.thread
         # check if a usb settings file exists
+        print('check2', os.getcwd())
         print(os.path.exists('usb_settings.db'))
         print(os.path.isfile('usb_settings.db'))
         with shelve.open('usb_settings.db') as settings:
@@ -66,10 +72,10 @@ class PlantUSB(object):
                 self.gain = 1
                 self.zero_level = 0
                 print("NEED TO CALIBRATE")
+        self.number_channels = 1
         self.counts_to_volts = float(MAX_ADC_VOLTAGE) / MAX_ADC_COUNTS / self.gain  # TODO: is this needed or just pass it to data
         logging.info('starting voltge to count: {0}'.format(self.counts_to_volts))
         # TODO:  delete below to get correct number and fix this part over all
-        self.counts_to_volts = 1.0
         self.data.set_count_to_volts(self.counts_to_volts, self.zero_level)
 
         if self._device:  # the device has been found, make sure it response to information requests properly
@@ -100,7 +106,7 @@ class PlantUSB(object):
         return device
 
     def connection_test(self):
-        """ Test if the device repsonse correctly.  The device should return a message when
+        """ Test if the device response correctly.  The device should return a message when
         given and identification call of "I"
         :return: True or False if the device is communicating correctly
         """
@@ -150,7 +156,7 @@ class PlantUSB(object):
             logging.info("not working")
             return None
         try:
-            usb_input = self._device.read(endpoint, num_usb_bytes, 1000)  # Type: array.array('b')
+            usb_input = self._device.read(endpoint, num_usb_bytes)  # type: array.array('b')
             return usb_input.tostring()  # return message after converting to a string
         except Exception as error:
             logging.info("Failed read")
@@ -173,11 +179,9 @@ class PlantUSB(object):
             usb_input = self._device.read(endpoint, num_usb_bytes)  # TODO fix this
 
         except Exception as error:
-            logging.error("Failed read")
+            logging.error("Failed data read")
             logging.error("No IN ENDPOINT: %s", error)
             return None
-        # print('check usb read 122 ', usb_input)
-        # print('check usb read 124 ', usb_input.tostring())
         if encoding == 'uint16':
             return convert_uint8_uint16(usb_input)
         elif encoding == "signed int16":
@@ -196,7 +200,9 @@ class PlantUSB(object):
         # moved
         # self.threaded_data_stream = ThreadedUSBDataCollector(self, self.data_queue)
         self.usb_write('R')  # signal for the device to start
-        self.threaded_data_stream = ThreadedUSBDataCollector(self, self.data_queue, self.packet_ready_event)
+        self.threaded_data_stream = ThreadedUSBDataCollector(self, self.number_channels,
+                                                             self.data_queue,
+                                                             self.packet_ready_event)
         self.threaded_data_stream.start()  # thread to handle the I/O
         self.process_data_stream()  # reads data from data_queue and
 
@@ -206,7 +212,8 @@ class PlantUSB(object):
         """
         # print('data queu size = {0}'.format(self.data_queue.qsize()))
         data_added = False
-        self.packet_ready_event.wait()  # wait for the data acquisition thread to signal an adc channel has been loaded
+        # wait for the data acquisition thread to signal an adc channel has been loaded
+        self.packet_ready_event.wait()
         self.packet_ready_event.clear()
         while self.data_queue.qsize():
             try:
@@ -220,7 +227,7 @@ class PlantUSB(object):
                 pass  # should not happen
         if data_added:
             self.data.display_data()
-        self.display_loop = self.master.after(0, self.process_data_stream)
+        self.display_loop = self.master.after(200, self.process_data_stream)
 
     # def convert_data(self, adc_counts):
     #     # logging.debug('processing data: {0}'.format(adc_counts))
@@ -235,6 +242,18 @@ class PlantUSB(object):
 
     def clear_in_buffer(self):
         pass
+
+    def set_number_channels(self, num_channels: int):
+        logging.debug('setting channels to: {0}'.format(num_channels))
+        self.number_channels = num_channels
+        self.usb_write('S{0}'.format(num_channels))
+        self.data.set_number_channels(num_channels)
+
+    def set_offset_vdac(self, _settings):
+        logging.debug('sending voltage: ', _settings)
+        _settings = int(_settings)
+
+        self.usb_write('V{0:0>4}'.format(_settings))
 
     def calibrate(self):
         # get 3 seconds of data
@@ -272,7 +291,7 @@ class PlantUSB(object):
         print('gain = ', self.counts_to_volts)
 
         self.zero_level -= lower_level_mean
-        settings = shelve.open('usb_settings')
+        settings = shelve.open('usb_settings.db')
         settings['gain'] = self.counts_to_volts
         settings['zero level'] = self.zero_level
         self.data.set_count_to_volts(self.counts_to_volts, self.zero_level)
@@ -283,10 +302,13 @@ class ThreadedUSBDataCollector(threading.Thread):
     handles the timing of when to get what adc channel.
     """
 
-    def __init__(self, device, data_queue: queue.Queue, data_event: threading.Event):
+    def __init__(self, device, number_adc_channels: int,
+                 data_queue: queue.Queue, data_event: threading.Event):
+        self.channel_tracker = 0
         self.read_count = 0  # for debug
         threading.Thread.__init__(self)
         self.device = device
+        self.number_adc_channels = number_adc_channels
         self.data_queue = data_queue  # queue to put the adc packets in
         self.data_done = data_event  # event to signal the main thread the data is ready
         self.adc_channel_queue = queue.Queue()  # queue the sepereate thread uses to tell this thread when to collect
@@ -312,16 +334,27 @@ class ThreadedUSBDataCollector(threading.Thread):
         while not self.termination_flag:
             # wait till the device has send the signal that an adc channel is done
             self.read_count += 1
-            print('read count: {0}'.format(self.read_count))
+            # print('read count: {0}'.format(self.read_count))
             self.adc_channel_ready_event.wait()
             self.adc_channel_ready_event.clear()
             if not self.adc_channel_queue.empty():  # make sure the adc channel is ready to import
+                # logging.info('channel size: {0}'.format(self.adc_channel_queue.qsize()))
+                if self.adc_channel_queue.qsize() != 1:
+                    logging.debug("====== qsize: {0}".format(self.adc_channel_queue.qsize()))
+                    # raise Exception
                 # tell the device to send the data
                 hold = self.adc_channel_queue.get()
+                logging.debug('channel tracker: {0}, channel expected{1}'
+                              .format(self.channel_tracker, hold))
+                if int(hold) != self.channel_tracker:
+                    logging.debug('channel tracker: {0}, expected: {1}'
+                                  .format(self.channel_tracker, hold))
+                self.channel_tracker += 1
+                self.channel_tracker %= 4
                 if self.running:
                     self.device.usb_write('F{0}'.format(hold))  # 'F#' is device symbol to export # adc channel
                     # read the adc channel data
-                    self.get_adc_channel(number_packets=PACKETS_PRE_CHANNEL)
+                    self.get_adc_buffer(number_packets=PACKETS_PER_CHANNEL)
                 else:  # dont request an ADC channel if read should be stopped, just send termination code to device
                     self.device.usb_write('E')  # 'E' is device symbol to stop the data reading
                     self.termination_flag = True  # Stop the thread from running
@@ -329,25 +362,31 @@ class ThreadedUSBDataCollector(threading.Thread):
 
         return 0
 
-    def get_adc_channel(self, endpoint=DATA_STREAM_ENDPOINT, number_packets=1):
-        """ Read an adc channel from the device.
-        :param endpoint: device endpoint to read, NOTE: the read endpoint needs to be format as 0x8n where n is the 
-        endpoint point number
+    def get_adc_buffer(self, endpoint=DATA_STREAM_ENDPOINT, number_packets=1):
+        """ Read an adc buffer from the device.
+        :param endpoint: device endpoint to read, NOTE: the read endpoint needs to be format as
+        0x8n where n is the endpoint point number
         :param number_packets: int, how many usb packet to read
         """
+        # logging.debug('getting adc channel with {0} inputs'.format(self.number_adc_channels))
         packets_gotten = 0  # keep track of haw many packets have been retrieved
         full_array = array.array('h')  # array to store data
+        # logging.debug('getting buffer')
         while number_packets + 1 > packets_gotten:
+            # logging.debug('getting packet: {0}; len = {1}'.format(packets_gotten, len(full_array)))
             data_packet = self.data_try(endpoint=endpoint)  # try to get a packet
-            logging.info('full array len: {0}'.format(len(full_array)))
+            # logging.info('full array len: {0}; {1}'.format(len(full_array), len(data_packet)))
+            if not data_packet:
+                return
+
             full_array.extend(data_packet)  # add data to array
             # the device should put a termination code at the end of the adc channel
             if full_array[-1] == TERMINATION_CODE:
                 full_array.pop()  # remove the termination code and exit loop
                 break
+            # if len(full_array) == 2040:
+            #     break
             packets_gotten += 1
-        # print('===============END packet===============')
-        # print(full_array)
         self.data_queue.put(full_array)
         self.data_done.set()  # set adc channel loaded flag
 
@@ -390,7 +429,7 @@ class ThreadedUSBInfo(threading.Thread):
         endpoint.
         """
         while not self.termination_flag:
-            logging.debug('reading info')
+            # logging.debug('reading info')
             if self.running:
                 # check if an adc channel has been finished by looking at the INFO_ENDPOINT,
                 # the timeout is long enough that this should hold here til the device responds
@@ -399,18 +438,18 @@ class ThreadedUSBInfo(threading.Thread):
                 if message:
                     self.adc_queue.put(chr(message[4]))  # put what channel the device should get
                     self.adc_event.set()  # set flag so ThreadedUSBDataCollector knows to get the adc buffer channel
-                    logging.debug('set adc event and put channel: {0}'.format(message))
-                    logging.debug('self.running: {0}'.format(self.running))
+                    logging.debug('got info: {0}'.format(message))
+                    # logging.debug('self.running: {0}'.format(self.running))
             else:
                 self.termination_flag = True
-        logging.debug('Ending info thread')
+        # logging.debug('Ending info thread')
         return 0
 
     def stop_running(self):
         """ set running flag to false so the next run will be the last.  Use run one more time to clear the 
         Endpoint buffer.  TODO; Is this necessary?
         """
-        print('stopping the info thread ++++++++++++++++')
+        logging.debug('stopping the info thread')
         self.running = False
 
 
