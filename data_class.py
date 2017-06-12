@@ -41,7 +41,7 @@ class StreamingData(object):
         self.display_data_ptr = 0
         self.counts_to_volts = 1
         self.voltage_shift = 0
-        self.adc_counts = [array.array('h') for _ in range(self.number_channels)]
+        self.adc_counts = [array.array('h')]
         self.y_data_to_display = [array.array('f', [0] * DISPLAY_BUFFER_SIZE)
                                   for _ in range(self.number_channels)]
 
@@ -77,12 +77,6 @@ class StreamingData(object):
         _len = len(data_packet)
         number_channels = self.number_channels
         while self.raw_data_ptr < _len:
-            # assume only 1 channel now and expand to multiple channels later
-            # self.y_data_to_display[0][self.display_data_ptr] = (data_packet[self.raw_data_ptr]
-            #                                                     * self.counts_to_volts
-            #                                                     + self.voltage_shift)
-            # self.raw_data_ptr += skip
-            # self.display_data_ptr += 1
             for data_to_display in self.y_data_to_display:
                 data_to_display[self.display_data_ptr] = (data_packet[self.raw_data_ptr]
                                                           * self.counts_to_volts)
@@ -92,12 +86,12 @@ class StreamingData(object):
             self.display_data_ptr += 1
 
         self.raw_data_ptr -= _len
-        # print(self.y_data_to_display[0][:self.display_data_ptr])
         # this will give the time that has been read so far
         self.end_time = self.t_data[self.display_data_ptr-1]
         # print('end time: {0}'.format(self.end_time))
 
     def clear(self):
+        self.adc_counts = [array.array('h')]
         self.end_time = 0
         self.raw_data_ptr = 0
         self.display_data_ptr = 0
@@ -124,69 +118,31 @@ class StreamingData(object):
         file_opts['filetypes'] = [("Pickle File", "*.pkl")]
         filename = filedialog.asksaveasfilename(**file_opts)
         filename += '.pkl'
-        print('save as file: {0}'.format(filename))
-        print("len raw data: {0}; number channels: {1}".format(len(self.adc_counts), self.number_channels))
-        print('last adc count: {0}; first adc count: {1}'.format(self.adc_counts[-1], self.adc_counts[0]))
+        # print('save as file: {0}'.format(filename))
+        # print("len raw data: {0}; number channels: {1}".format(len(self.adc_counts), self.number_channels))
+        # print('last adc count: {0}; first adc count: {1}'.format(self.adc_counts[-1], self.adc_counts[0]))
         len_channel = int(len(self.adc_counts) / self.number_channels)
-        print('len channel: {0}'.format(len_channel))
+        # print('len channel: {0}'.format(len_channel))
         channel_data = dict()
         for i in range(self.number_channels):
             channel_data["channel {0}".format(i)] = array.array('h')
         data_ptr = 1
-        print('channel data: {0}'.format(channel_data))
-        for i in range(len_channel):
+        # print('channel data: {0}'.format(channel_data))
+        for i in range(len_channel-1):
             for j in range(self.number_channels):
+                # print('j: {0}; i: {1}; data_ptr: {2}'.format(j, i, data_ptr))
                 channel_data["channel {0}".format(j)].append(self.adc_counts[data_ptr])
                 data_ptr += 1
-        for ch in channel_data:
-            print(channel_data[ch])
+        # for ch in channel_data:
+            # print(channel_data[ch])
         data_struct = dict()
         data_struct['sample rate'] = SAMPLE_RATE
+        data_struct['counts to mVs'] = self.counts_to_volts
         for _data_ch in channel_data:
             data_struct[_data_ch] = channel_data[_data_ch]
 
-        # with shelve.open(filename) as data_struct:
-        #     data_struct['sample rate'] = SAMPLE_RATE
-        #     for _data_ch in channel_data:
-        #         data_struct[_data_ch] = channel_data[_data_ch]
-        #     data_struct.close()
         with open(filename, 'wb') as f:
             pickle.dump(data_struct, f, pickle.HIGHEST_PROTOCOL)
-
-
-    def save(self):
-        """ Save the data to a file, use the shelve module to store the adc counts,
-        the voltage per adc count ratio and the name of the channel
-        """
-        # try:  # if the user changed the last number of the file name try to update the next filename
-        #     new_number = int(self.filename_str[-3:])
-        #     self.master.save_state.file_number = new_number
-        # except:
-        #     pass
-        #
-        # path = os.getcwd()
-        # data_path = path + '/data/' + self.filename_str[1:7]
-        # # check if user is attempting to overwrite a data file
-        # valid_file_name = False
-        # while not valid_file_name:
-        #     if os.path.isfile(data_path + '/' + self.filename_str + '.shlv'):
-        #         new_file_num = int(self.filename_str[-3:]) + 1
-        #         self.filename_str = self.filename_str[:-3] + str(new_file_num).zfill(3)
-        #         self.save_state.file_number = new_file_num
-        #     else:
-        #         valid_file_name = True
-        # print('filename: ', data_path+'/'+self.filename_str+'.csv')
-        #
-        # with open(data_path+'/'+self.filename_str+'.shlv', 'wb') as shelve_data:
-        #     shelve_data['mv_per_count'] = self.counts_to_volts
-        #     for i, data_channel in enumerate(self.adc_counts):
-        #         shelve_data['data{0}'.format(i)] = data_channel
-        #
-        #     shelve_data.close()
-        file_opts = {}
-        print('saving hello')
-
-
 
 
 class SaveTopLevel(tk.Toplevel):
@@ -246,28 +202,6 @@ class SaveTopLevel(tk.Toplevel):
         self.filename_str = value + self.filename_str[1:]
         fill_in_filename(self.filename_entry, self.filename_str)
 
-    # def save(self):
-    #     try:  # if the user changed the last number of the file name try to update the next filename
-    #         new_number = int(self.filename_str[-3:])
-    #         self.master.save_state.file_number = new_number
-    #     except:
-    #         pass
-    #
-    #     path = os.getcwd()
-    #     data_path = path + '/data/' + self.filename_str[1:7]
-    #     # check if user is attempting to overwrite a data file
-    #     valid_file_name = False
-    #     while not valid_file_name:
-    #         if os.path.isfile(data_path + '/' + self.filename_str + '.shlv'):
-    #             new_file_num = int(self.filename_str[-3:]) + 1
-    #             self.filename_str = self.filename_str[:-3] + str(new_file_num).zfill(3)
-    #             self.save_state.file_number = new_file_num
-    #         else:
-    #             valid_file_name = True
-    #     print('filename: ', data_path+'/'+self.filename_str+'.csv')
-    #
-    #     with open(data_path+'/'+self.filename_str+'.shlv', 'wb') as shelve_data:
-    #         shelve_data['mv_per_count'] =
 
 class SaveState(object):
     """ Class to keep track of the date of the experiment, the letter of the branch

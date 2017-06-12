@@ -39,7 +39,6 @@ class DataStreamingViewer(tk.Tk):
         # initialize the custom data class to hold the data and the device
         self.data = data_class.StreamingData()
         self.device = usb_comm.PlantUSB(self)
-        print('check3')
         # initialize variables
         self.running_job = None
         self.display_time_frame = 5  # type: int
@@ -126,6 +125,7 @@ class DataStreamingViewer(tk.Tk):
 
     def start_reading(self):
         self.data.clear()
+
         # disable the run and calibrate buttons to prevent their use
         self.read_button.config(state='disabled')
         self.calibrate_button.config(state='disabled')
@@ -141,7 +141,6 @@ class DataStreamingViewer(tk.Tk):
         self.device.set_gain(self.gain)
 
     def set_offset_vdac(self, *args):
-        print('set offset vdac')
         try:
             self.vdac_setting = self.vdac_var.get()
             self.device.set_offset_vdac(self.vdac_setting/4)

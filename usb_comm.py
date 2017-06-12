@@ -49,7 +49,6 @@ class PlantUSB(object):
         :param vendor_id: hexadecimal of USB's vendor id
         :param product_id: hexadecimal of USB's product id
         """
-        print('check1')
         self.channel_tracker = 0
         self.master = master  # type: tk.Tk
         self.data = master.data  # type: data_class.StreamingData
@@ -60,18 +59,18 @@ class PlantUSB(object):
         # Placeholder for now, make a new thread everytime a data stream is started
         self.threaded_data_stream = None  # type: threading.thread
         # check if a usb settings file exists
-        print('check2', os.getcwd())
-        print(os.path.exists('usb_settings.db'))
-        print(os.path.isfile('usb_settings.db'))
+        # print('check2', os.getcwd())
+        # print(os.path.exists('usb_settings.db'))
+        # print(os.path.isfile('usb_settings.db'))
         with shelve.open('usb_settings.db') as settings:
             if settings:
                 self.gain = settings['gain']
                 self.zero_level = settings['zero level']
                 settings.close()
             else:
-                self.gain = 1
+                self.gain = 1.0
                 self.zero_level = 0
-                print("NEED TO CALIBRATE")
+                # print("NEED TO CALIBRATE")
         self.number_channels = 1
         self.counts_to_volts = float(MAX_ADC_VOLTAGE) / MAX_ADC_COUNTS / self.gain  # TODO: is this needed or just pass it to data
         logging.info('starting voltge to count: {0}'.format(self.counts_to_volts))
