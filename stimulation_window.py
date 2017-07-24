@@ -1,6 +1,9 @@
 
 import tkinter as tk
 
+# local files
+import usb_comm
+
 __author__ = 'Kyle Vitautas Lopin'
 
 MAX_CURRENT = 255
@@ -9,7 +12,7 @@ MIN_CURRENT = 1
 
 
 class Stimulator(tk.Toplevel):
-    def __init__(self, device, parent=None):
+    def __init__(self, device: usb_comm.PlantUSB, parent=None):
         tk.Toplevel.__init__(self, parent)
         self.device = device
         self.geometry("500x450")
@@ -43,12 +46,12 @@ class Stimulator(tk.Toplevel):
         tk.Spinbox(self, from_=1, to=3, textvariable=self.channel,
                    command=self.variable_changed).grid(row=2, column=1)
 
-        tk.Label(self, text='Current direction:').grid(row=3, column=0)
-        tk.Radiobutton(self, text='Source',
-                       variable=self.polarity, value='Source').grid(row=3, column=1)
-        tk.Radiobutton(self, text='Sink',
-                       variable=self.polarity, value='Sink',
-                       command=self.variable_changed).grid(row=3, column=2)
+        # tk.Label(self, text='Current direction:').grid(row=3, column=0)
+        # tk.Radiobutton(self, text='Source',
+        #                variable=self.polarity, value='Source').grid(row=3, column=1)
+        # tk.Radiobutton(self, text='Sink',
+        #                variable=self.polarity, value='Sink',
+        #                command=self.variable_changed).grid(row=3, column=2)
 
         self.run_button = tk.Button(self, text="Prepare Stimulator", command=self.prepare)
         self.run_button.grid(row=10, column=1)
@@ -56,28 +59,21 @@ class Stimulator(tk.Toplevel):
         self.time.set(1000)
         self.polarity.set('Source')
 
-
     def variable_changed(self, *args):
         if self.run_button:
             self.prepared = False
             self.run_button.config(text="Prepare Stimulator", command=self.prepare)
 
     def prepare(self):
-        # self.device.send_
-        # check values are valid
-        print('Send the device this info: ')
-        print("current: ", self.current.get())
-        print("time: ", self.time.get())
-        print("polarity: ", self.polarity.get())
-        print('channel: ', self.channel.get())
-        # fix the variables incase the user put some crap in there
+        self.device.set_stimulator(self.time.get(), self.current.get(), self.channel.get(), self.polarity.get())
+        # fix the variables in case the user put some crap in there
         for i in [self.current, self.time, self.channel]:
             update_entries(i)
         self.run_button.config(text="Stimulate", command=self.stimulate)
         self.prepared = True
 
     def stimulate(self):
-        print("Send device stimulate command")
+        self.device.give_stimulation()
 
 
 def update_entries(entry):

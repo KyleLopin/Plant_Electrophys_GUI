@@ -151,8 +151,7 @@ class PlantUSB(object):
         :param num_usb_bytes: how many bytes to read from the device
         :return: string of information from the device if it responded, else None if not
         """
-        self.usb_read_data(num_usb_bytes=num_usb_bytes, endpoint=endpoint, encoding='string')
-        print("THIS WAS CHANGED")
+        return self.usb_read_data(num_usb_bytes=num_usb_bytes, endpoint=endpoint, encoding='string')
 
     # TODO remove usb_read_info and replace with usb_read_data with proper endpoint and num bytes, encode = 'String
     def usb_read_data(self, num_usb_bytes=USB_DATA_BYTE_SIZE, endpoint=DATA_STREAM_ENDPOINT, encoding=None):
@@ -196,7 +195,9 @@ class PlantUSB(object):
                                                              self.data_queue,
                                                              self.packet_ready_event)
         self.threaded_data_stream.start()  # thread to handle the I/O
+        print("Start reading4")
         self.process_data_stream()  # reads data from data_queue and
+        print("Start reading5")
 
     def process_data_stream(self):
         """ Wait for the data azquisition thread the laod a packet, then load it into the data class and recall this
@@ -248,13 +249,28 @@ class PlantUSB(object):
         self.usb_write('V{0:0>4}'.format(_settings))
 
     def set_stimulator(self, time, current, channel, polarity):
-        """ Send command to prepare the electrical stimulator
+        """ Send command to prepare the electrical stimulator, all the ints are converted to strings for the device
+        to handle
         :param time: int - milliseconds to give stimulation
         :param current:  int (0-255)
         :param channel:
         :param polarity:
         :return:
         """
+        time_str = str(time).zfill(5)
+        current_str = str(current).zfill(3)
+        channel_str = str(channel)
+        if polarity == 'Sink':
+            polarity_str = 'n'
+        elif polarity == "Source":
+            polarity_str = 'p'
+        else:
+            raise Exception("wrong polarity entry")
+        usb_str = "s|{0}|{1}|{2}|{3}".format(current_str, time_str, polarity_str, channel_str)
+        self.usb_write(usb_str)
+
+    def give_stimulation(self):
+        self.usb_write('G')
 
     def calibrate(self):
         # get 3 seconds of data
@@ -483,7 +499,6 @@ def convert_uint8_to_signed_int16(_bytes):
     # below takes 6-11msec
     length = int(len(_bytes) / 2)
     return array.array('h', (ctypes.c_short * length).from_buffer_copy(_bytes))
-
 
 
 def convert_uint8_to_string(_bytes):

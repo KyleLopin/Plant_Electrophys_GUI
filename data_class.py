@@ -35,8 +35,7 @@ class StreamingData(object):
         self.t_data = array.array('f')
         for i in range(DISPLAY_BUFFER_SIZE):
             self.t_data.append(i*self.sampling_period)
-
-        logging.debug('t data: ', self.t_data[0:10])
+        logging.debug('t data: {0}'.format(self.t_data[0:10]))
         self.raw_data_ptr = 0
         self.display_data_ptr = 0
         self.counts_to_volts = 1
@@ -97,7 +96,7 @@ class StreamingData(object):
         self.display_data_ptr = 0
         self.y_data_to_display = [array.array('f', [0] * DISPLAY_BUFFER_SIZE)
                                   for _ in range(self.number_channels)]
-        logging.debug('ydisplay: ', len(self.y_data_to_display))
+        logging.debug('ydisplay: {0}'.format(len(self.y_data_to_display)))
 
     def set_number_channels(self, num):
         self.number_channels = num

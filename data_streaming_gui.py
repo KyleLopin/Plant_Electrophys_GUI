@@ -15,7 +15,7 @@ import os
 import time
 import tkinter as tk
 # installed libraries
-#local files
+# local files
 import data_class
 import plotter
 import stimulation_window
@@ -28,6 +28,7 @@ sample_rate = 10000  # Hz
 sample_period = 1. / sample_rate  # seconds
 gain_list = (1, 2, 4, 8)
 
+
 class DataStreamingViewer(tk.Tk):
     """ GUI to display the data from adc readings from a USB device.  This program should interact with the 
     device mainly with the usb device and the usb_comm file will deal with the data and how its displayed.
@@ -36,7 +37,7 @@ class DataStreamingViewer(tk.Tk):
     def __init__(self, parent=None):
         tk.Tk.__init__(self, parent)
         logging.basicConfig(format='%(asctime)s %(module)s %(lineno)d: %(levelname)s %(message)s',
-                            datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.INFO)
+                            datefmt='%m/%d/%Y %I:%M:%S %p', level=logging.DEBUG)
         # initialize the custom data class to hold the data and the device
         self.data = data_class.StreamingData()
         self.device = usb_comm.PlantUSB(self)
@@ -67,7 +68,6 @@ class DataStreamingViewer(tk.Tk):
         self.create_offset_frame(offset_frame)
         self.create_gain_frame(offset_frame)
         offset_frame.pack(side='top')
-
         button_frame1 = tk.Frame(self)
         button_frame1.pack(side='top')
         self.read_button = tk.Button(button_frame1, text="Read", command=self.start_reading)
@@ -78,7 +78,6 @@ class DataStreamingViewer(tk.Tk):
         self.clear_button.pack(side='left')
         self.calibrate_button = tk.Button(button_frame1, text='Calibrate', command=self.calibrate)
         # self.calibrate_button.pack(side='left')
-
 
         self.data_plot = plotter.Plotter(self, self.data)
         self.data_plot.pack(side='top', fill=tk.BOTH, expand=True)
@@ -149,7 +148,7 @@ class DataStreamingViewer(tk.Tk):
 
         # disable the run and calibrate buttons to prevent their use
         self.read_button.config(state='disabled')
-        self.calibrate_button.config(state='disabled')
+        # self.calibrate_button.config(state='disabled')
         self.device.start_reading()
 
     def set_channels(self, *args):
