@@ -18,6 +18,7 @@ import tkinter as tk
 #local files
 import data_class
 import plotter
+import stimulation_window
 import usb_comm
 
 
@@ -78,14 +79,34 @@ class DataStreamingViewer(tk.Tk):
         self.calibrate_button = tk.Button(button_frame1, text='Calibrate', command=self.calibrate)
         # self.calibrate_button.pack(side='left')
 
+
         self.data_plot = plotter.Plotter(self, self.data)
         self.data_plot.pack(side='top', fill=tk.BOTH, expand=True)
         self.data.add_display_area(self.data_plot)
-        tk.Button(self, text='Save all data', command=self.save_data).pack(side='top')
+        tk.Button(self, text='Save all data', command=self.save_data).pack(side='left')
+        self.connected_button = tk.Button(self, command=self.connection_handler)
+        self.connected_button.pack(side='right')
+        self.update_connection_button()
+
+        tk.Button(self, text="Stimulate", command=self.open_stimulation_window).pack(side='left')
 
     def save_data(self):
         # self.data_saved = save_toplevel.SaveTopLevel(self, self.data.x_data, self.data.y_data_to_display)
         self.data.call_save()
+
+    def update_connection_button(self):
+        if self.device.connected:
+            self.connected_button.config(text="Connected", bg='green')
+        elif self.device.found:
+            self.connected_button.config(text="Not Connected", bg='Red')
+        else:
+            self.connected_button.config(text="Device Not Found", bg='Red')
+
+    def open_stimulation_window(self):
+        stimulation_window.Stimulator(self.device)
+
+    def connection_handler(self):
+        print('handle reconnection here')
 
     def create_time_frame(self, _frame):
         tk.Label(_frame, text="Seconds to display: ").pack(side='left')

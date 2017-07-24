@@ -52,16 +52,16 @@ class PlantUSB(object):
         self.channel_tracker = 0
         self.master = master  # type: tk.Tk
         self.data = master.data  # type: data_class.StreamingData
+        self.connected = False  # type: bool
+        self.found = False
         self._device = self.connect_usb(vendor_id, product_id)  # Type: pyUSB device
         self.data_queue = queue.Queue()  # This will store all the raw adc counts of an adc channel, i.e. as many data
         # points as is stored in DC_CHANNEL_DATA_SIZE
         self.packet_ready_event = threading.Event()
         # Placeholder for now, make a new thread everytime a data stream is started
         self.threaded_data_stream = None  # type: threading.thread
+
         # check if a usb settings file exists
-        # print('check2', os.getcwd())
-        # print(os.path.exists('usb_settings.db'))
-        # print(os.path.isfile('usb_settings.db'))
         with shelve.open('usb_settings.db') as settings:
             if settings:
                 self.gain = settings['gain']
@@ -70,10 +70,9 @@ class PlantUSB(object):
             else:
                 self.gain = 1.0
                 self.zero_level = 0
-                # print("NEED TO CALIBRATE")
         self.number_channels = 1
         self.counts_to_volts = float(MAX_ADC_VOLTAGE) / MAX_ADC_COUNTS / self.gain  # TODO: is this needed or just pass it to data
-        logging.info('starting voltge to count: {0}'.format(self.counts_to_volts))
+        logging.info('starting voltage to count: {0}'.format(self.counts_to_volts))
         # TODO:  delete below to get correct number and fix this part over all
         self.data.set_count_to_volts(self.counts_to_volts, self.zero_level)
 
@@ -98,6 +97,7 @@ class PlantUSB(object):
             logging.info("Device not found")
             return None
         else:  # device was found
+            self.found = True
             logging.info("USB device is found")
 
         # set the active configuration. the pyUSB module deals with the details
@@ -118,7 +118,7 @@ class PlantUSB(object):
         logging.debug('Received identifying message: {0}'.format(received_message))
         if received_message == RECIEVED_TEST_MESSAGE:
             logging.info("Device identified")
-            self.working = True  # for usb_write to work it needs the working property to be true
+            self.connected = True  # for usb_write to work it needs the working property to be true
             return True
         else:
             logging.info("Identification Failed")
@@ -151,17 +151,10 @@ class PlantUSB(object):
         :param num_usb_bytes: how many bytes to read from the device
         :return: string of information from the device if it responded, else None if not
         """
-        if not self.connected:
-            logging.info("not working")
-            return None
-        try:
-            usb_input = self._device.read(endpoint, num_usb_bytes)  # type: array.array('b')
-            return usb_input.tostring()  # return message after converting to a string
-        except Exception as error:
-            logging.info("Failed read")
-            logging.info("No IN ENDPOINT: %s", error)
-            return None
-# TODO remove usb_read_info and replace with usb_read_data with proper endpoint and num bytes, encode = 'String
+        self.usb_read_data(num_usb_bytes=num_usb_bytes, endpoint=endpoint, encoding='string')
+        print("THIS WAS CHANGED")
+
+    # TODO remove usb_read_info and replace with usb_read_data with proper endpoint and num bytes, encode = 'String
     def usb_read_data(self, num_usb_bytes=USB_DATA_BYTE_SIZE, endpoint=DATA_STREAM_ENDPOINT, encoding=None):
         """ Read data from the usb and return it, if the read fails, log the miss and return None
         :param num_usb_bytes: number of bytes to read
@@ -253,6 +246,15 @@ class PlantUSB(object):
         _settings = int(_settings)
 
         self.usb_write('V{0:0>4}'.format(_settings))
+
+    def set_stimulator(self, time, current, channel, polarity):
+        """ Send command to prepare the electrical stimulator
+        :param time: int - milliseconds to give stimulation
+        :param current:  int (0-255)
+        :param channel:
+        :param polarity:
+        :return:
+        """
 
     def calibrate(self):
         # get 3 seconds of data
